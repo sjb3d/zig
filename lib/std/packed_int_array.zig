@@ -72,10 +72,8 @@ pub fn PackedIntIo(comptime Int: type, comptime endian: Endian) type {
             const tail_keep_bits = container_bits - (int_bits + head_keep_bits);
 
             //read bytes as container
-            const value_ptr: *align(1) const Container = @ptrCast(&bytes[start_byte]);
-            var value = value_ptr.*;
-
-            if (endian != native_endian) value = @byteSwap(value);
+            const container_bytes = bytes[start_byte..][0..(container_bits / 8)];
+            var value = std.mem.readInt(Container, container_bytes, endian);
 
             switch (endian) {
                 .big => {
@@ -122,10 +120,8 @@ pub fn PackedIntIo(comptime Int: type, comptime endian: Endian) type {
             const value = @as(Container, @intCast(@as(UnInt, @bitCast(int)))) << keep_shift;
 
             //read existing bytes
-            const target_ptr: *align(1) Container = @ptrCast(&bytes[start_byte]);
-            var target = target_ptr.*;
-
-            if (endian != native_endian) target = @byteSwap(target);
+            const container_bytes = bytes[start_byte..][0..(container_bits / 8)];
+            var target = std.mem.readInt(Container, container_bytes, endian);
 
             //zero the bits we want to replace in the existing bytes
             const inv_mask = @as(Container, @intCast(std.math.maxInt(UnInt))) << keep_shift;
@@ -135,10 +131,8 @@ pub fn PackedIntIo(comptime Int: type, comptime endian: Endian) type {
             //merge the new value
             target |= value;
 
-            if (endian != native_endian) target = @byteSwap(target);
-
             //save it back
-            target_ptr.* = target;
+            std.mem.writeInt(Container, container_bytes, target, endian);
         }
 
         /// Provides a PackedIntSlice of the packed integers in `bytes` (which begins at `bit_offset`)
@@ -408,10 +402,10 @@ test "PackedIntArray init" {
 test "PackedIntArray initAllTo" {
     const S = struct {
         fn doTheTest() !void {
-            const PackedArray = PackedIntArray(u3, 8);
+            const PackedArray = PackedIntArray(u10, 8); // use u10 for 3-byte worst case Io
             var packed_array = PackedArray.initAllTo(5);
             var i: usize = 0;
-            while (i < packed_array.len) : (i += 1) try testing.expectEqual(@as(u3, 5), packed_array.get(i));
+            while (i < packed_array.len) : (i += 1) try testing.expectEqual(@as(u10, 5), packed_array.get(i));
         }
     };
     try S.doTheTest();
